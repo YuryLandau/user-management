@@ -20,7 +20,7 @@ const DB_URL: &str = env!("DATABASE_URL");
 
 //constants
 const OK_RESPONSE:&str = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n";
-const NOT_FOUND_RESPONSE: &str = "HTTP/1.1 404 Not Found\r\n\r\n";
+const NOT_FOUND: &str = "HTTP/1.1 404 Not Found\r\n\r\n";
 const INTERNAL_ERROR: &str = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
 
 fn main() {
@@ -31,7 +31,7 @@ fn main() {
     }
 
     //start server and print port
-    let listener = TcpListener::bind("0.0.0.1:8080").unwrap();
+    let listener = TcpListener::bind("0.0.0.0:8080").unwrap();
     println!("Rodando liso na porta 8080");
 
     for stream in listener.incoming() {
@@ -73,7 +73,7 @@ fn get_id(request: &str) -> &str {
 }
 
 //deserialize user from request body without id
-fn get_user_from_request(request: &str) -> Result<User, serde_json::Error> {
+fn get_user_request_body(request: &str) -> Result<User, serde_json::Error> {
     serde_json::from_str(request.split("\r\n\r\n").last().unwrap_or_default())
 }
 
@@ -169,7 +169,7 @@ fn handle_get_request(request: &str) -> (String, String) {
                         serde_json::to_string(&user).unwrap(),
                     )
                 }
-                _ => (NOT_FOUND_RESPONSE.to_string(), "User not found".to_string()),
+                _ => (NOT_FOUND.to_string(), "User not found".to_string()),
             }
         }
         _ => (INTERNAL_ERROR.to_string(), "Internal Error".to_string()),
@@ -203,7 +203,7 @@ fn handle_get_all_request(request: &str) -> (String, String) {
 
 fn handle_put_request(request: &str) -> (String, String) {
     match (
-        get_user_from_request(&request),
+        get_user_request_body(&request),
         Client::connect(DB_URL, NoTls),
         get_id(&request).parse::<i32>(),
     ) {
@@ -217,6 +217,27 @@ fn handle_put_request(request: &str) -> (String, String) {
 
             (OK_RESPONSE.to_string(), "User updated".to_string())
         }
+        _ => (INTERNAL_ERROR.to_string(), "Internal Error".to_string()),
+    }
+}
+
+fn handle_delete_request(request: &str) -> (String, String) {
+    match (
+        get_id(&request).parse::<i32>(),
+        Client::connect(DB_URL, NoTls),
+    ) {
+        (Ok(id), Ok(mut client)) => {
+            let rows_affected = client
+                .execute("DELETE FROM users WHERE id = $1", &[&id])
+                .unwrap();
+
+            if rows_affected == 0 {
+                return (NOT_FOUND.to_string(), "User not found".to_string());
+            }
+
+            (OK_RESPONSE.to_string(), "User deleted".to_string())
+        }
+
         _ => (INTERNAL_ERROR.to_string(), "Internal Error".to_string()),
     }
 }
