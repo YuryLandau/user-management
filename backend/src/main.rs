@@ -200,3 +200,23 @@ fn handle_get_all_request(request: &str) -> (String, String) {
         _ => (INTERNAL_ERROR.to_string(), "Internal Error".to_string()),
     }
 }
+
+fn handle_put_request(request: &str) -> (String, String) {
+    match (
+        get_user_from_request(&request),
+        Client::connect(DB_URL, NoTls),
+        get_id(&request).parse::<i32>(),
+    ) {
+        (Ok(user), Ok(mut client), Ok(id)) => {
+            client
+                .execute(
+                    "UPDATE users SET name = $1, email = $2 WHERE id = $3",
+                    &[&user.name, &user.email, &id],
+                )
+                .unwrap();
+
+            (OK_RESPONSE.to_string(), "User updated".to_string())
+        }
+        _ => (INTERNAL_ERROR.to_string(), "Internal Error".to_string()),
+    }
+}
